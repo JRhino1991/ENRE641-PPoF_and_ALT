@@ -1,2 +1,2 @@
 # ENRE641
-Python functions to support ENRE641 - Probablistic Physic of Failure and Accelerated Testing
+Python functions to support ENRE641 - Probabalistic Physic of Failure and Accelerated Testing
