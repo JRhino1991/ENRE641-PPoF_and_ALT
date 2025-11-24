@@ -22,6 +22,7 @@ ENRE641-PPoF_and_ALT/
     └── notebooks/                   # Clean example notebooks (5.1–5.9)
 
 
+<<<<<<< HEAD
 This layout separates the core modelling code, Bayesian fitting tools, and validation notebooks, making the repo clean, modular, and easy to extend.
 
 📈 Main Capabilities
@@ -86,11 +87,66 @@ jupyter notebook
 Then open:
 
 modarres_ch5_validation/notebooks/
+=======
+This structure separates the core modelling code, Bayesian fitting tools, and validation notebooks, making the repo clean, modular, and easy to extend.
+
+📈 Main Capabilities
+1. ADT Fitters Module (adt_fitters/)
+
+Includes implementations for accelerated degradation testing models, such as:
+
+Square-root Arrhenius degradation model
+
+LSQ, MLE, and Bayesian parameter estimation
+
+Diagnostic plots & residual analysis
+
+Noise modelling (additive and multiplicative)
+
+Predictive degradation-time curves
+
+2. ALT Bayesian Fitters Module (alt_bayesian_fitters/)
+
+A growing library of Bayesian ALT tools:
+
+emcee-based Bayesian ALT models
+
+Accelerated life model likelihood functions
+
+Posterior predictive checks
+
+MCMC sampling workflows
+
+Unit tests demonstrating usage
+
+3. Modarres et al. Chapter 5 Reproductions (modarres_ch5_validation/)
+
+Fully reproducible Python implementations of:
+
+Example 5.1: Basic degradation modelling
+
+Example 5.2: Resistor degradation
+
+Example 5.3: LED degradation
+
+Example 5.4: Wear / weight-loss degradation
+
+Example 5.6: LED luminosity degradation
+
+Example 5.7: POD model
+
+Example 5.8: Crack growth (Paris law-type models)
+
+Example 5.9: Crack propagation simulation
+
+These notebooks reproduce the textbook results and extend them with improved diagnostics, Bayesian estimation, and visualisation.
+>>>>>>> 3d2d5f6434f3ff94823b5984d5e7daea1cd46a89
 
 🧠 Technologies Used
 
 Python 3.12+
 
+<<<<<<< HEAD
 NumPy, SciPy, Pandas
 
 PyMC
@@ -102,10 +158,68 @@ Jupyter / IPython
 🧪 Testing
 
 The Bayesian ALT module includes unit tests:
+=======
+NumPy / SciPy
+
+Pandas
+
+Matplotlib / Seaborn
+
+emcee (for Bayesian fitting)
+
+Jupyter / IPython
+
+Custom ADT and ALT modules built from scratch
+
+🚀 How to Use This Repository
+Clone the repo
+git clone https://github.com/JRhino1991/ENRE641-PPoF_and_ALT.git
+cd ENRE641-PPoF_and_ALT
+
+Install dependencies
+
+(Exact list may vary; adjust your environment as needed.)
+
+pip install numpy scipy pandas matplotlib emcee arviz
+
+Run notebooks
+
+Open any notebook:
+
+jupyter notebook
+
+
+All example notebooks and validation studies are located in:
+
+modarres_ch5_validation/notebooks/
+
+📚 Academic Context
+
+This work supports:
+
+Physics-of-Failure modelling
+
+Accelerated degradation / accelerated life test design
+
+Bayesian reliability estimation
+
+Structural health monitoring
+
+Probability of Detection (POD) modelling
+
+Data-driven RUL prediction foundations
+
+The repository is part of the course requirements and project work for ENRE641 – PPoF & ALT and aligns with ongoing research in reliability engineering and PHM.
+
+🧪 Testing
+
+Unit tests for the Bayesian ALT module are included in:
+>>>>>>> 3d2d5f6434f3ff94823b5984d5e7daea1cd46a89
 
 alt_bayesian_fitters/test_ALT_Bayesian_fitters.py
 
 
+<<<<<<< HEAD
 Run with:
 
 pytest
@@ -114,9 +228,26 @@ pytest
 
 This project is intended for academic and research use.
 Please cite appropriately if used in publications.
+=======
+Run them with:
+
+pytest
+
+
+(Install with pip install pytest if needed.)
+
+📄 License
+
+This project is for academic and research purposes.
+Feel free to fork or extend, but please cite appropriately if used in publications.
+>>>>>>> 3d2d5f6434f3ff94823b5984d5e7daea1cd46a89
 
 👤 Author
 
 Justin Ryan
 University of Maryland – Reliability Engineering
+<<<<<<< HEAD
 Australian Army – ESEP / ATEC
+=======
+Australian Army (ESEP / ATEC placement)
+>>>>>>> 3d2d5f6434f3ff94823b5984d5e7daea1cd46a89
