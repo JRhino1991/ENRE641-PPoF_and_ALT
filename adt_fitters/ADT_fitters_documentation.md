@@ -78,7 +78,7 @@ model = Some_ADT_Model_Class(
 
 Damage model (increasing) with temperature acceleration:
 
-[ D(t, T) = a , t^{n} \exp\left( \frac{E_a}{k_B}\left(\frac{1}{T_{use}} - \frac{1}{T}\right) \right) ]
+$$ D(t, T) = a , t^{n} \exp\left( \frac{E_a}{k_B}\left(\frac{1}{T_{use}} - \frac{1}{T}\right) \right) $$
 
 ### 2.2. Constructor
 
@@ -94,7 +94,7 @@ Fit_ADT_Power_Arrhenius(...)
 
 Damage model with power law in time + exponential in stress:
 
-[ D(t, S) = b \exp(a S) t^{n} ]
+$$ D(t, S) = b \exp(a S) t^{n} $$
 
 ### 3.2. Constructor
 
@@ -110,7 +110,7 @@ Fit_ADT_Power_Exponential(...)
 
 Generic power–power damage model:
 
-[ D(t, S) = b , S^{n} , t^{m} ]
+$$ D(t, S) = b , S^{n} , t^{m} $$
 
 ### 4.2. Constructor
 
@@ -126,7 +126,7 @@ Fit_ADT_Power_Power(...)
 
 Performance model (decreasing) with Arrhenius acceleration:
 
-[ D(t, T) = [1 + a (t e^{E_a/k_B(1/T_{use} - 1/T)})^{b}]^{-1} ]
+$$ D(t, T) = [1 + a (t e^{E_a/k_B(1/T_{use} - 1/T)})^{b}]^{-1} $$
 
 ### 5.2. Constructor
 
