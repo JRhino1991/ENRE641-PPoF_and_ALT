@@ -1,4 +1,4 @@
-Time (hrs),unit_id,luminosity,temperature_C
+time_hr,unit,D,Temp_C
 336,Unit 1,0.9704,25
 672,Unit 1,0.9439,25
 1008,Unit 1,0.9614,25

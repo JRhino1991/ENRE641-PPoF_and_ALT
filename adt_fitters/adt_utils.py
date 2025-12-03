@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.stats as ss
 from scipy.stats import norm, probplot, weibull_min, gamma, lognorm
 from IPython.display import Markdown, display
 from scipy.optimize import brentq
@@ -72,6 +73,36 @@ def loglik_lognormal(y, mu, sigma):
     z = (log_y - log_mu) / sigma
     # p(y|mu,sigma) = 1/(y*sigma) * phi((log y - log mu)/sigma)
     return -np.sum(np.log(y)) - len(y) * np.log(sigma) + np.sum(norm.logpdf(z))
+
+def loglik_trunc_normal(y, mu, sigma, eps=1e-12):
+    """
+    Log-likelihood for y ~ Normal(mu, sigma^2) truncated to [0, 1].
+
+    Works elementwise and returns scalar sum over all observations.
+    """
+    y = np.asarray(y, float)
+    mu = np.asarray(mu, float)
+
+    # Clip into open interval to avoid log(0) / cdf issues
+    y_clip  = np.clip(y,  0.0 + eps, 1.0 - eps)
+    mu_clip = np.clip(mu, 0.0 - 10.0, 1.0 + 10.0)  # mu can be outside [0,1], but not crazy
+
+    sigma = float(sigma)
+    if sigma <= 0:
+        return -np.inf
+
+    z      = (y_clip  - mu_clip) / sigma
+    a_tr   = (0.0     - mu_clip) / sigma
+    b_tr   = (1.0     - mu_clip) / sigma
+    denom  = norm.cdf(b_tr) - norm.cdf(a_tr)
+
+    # If truncation mass is (numerically) 0 anywhere, bail out
+    if np.any(denom <= eps) or not np.all(np.isfinite(denom)):
+        return -np.inf
+
+    # log φ(z) - log σ - log(Φ(b)-Φ(a))
+    logpdf = norm.logpdf(z) - np.log(sigma) - np.log(denom)
+    return np.sum(logpdf)
 
 
 # ---------------------------------------------------------------------
@@ -700,8 +731,13 @@ class ADTDataGenerator:
         theta = (b, n, m)
 
     "power_exponential":
-        D(t, S) = b * exp(a * S) * t^n
+        D(t, S) = b * exp(a / S) * t^n
         theta = (b, a, n)
+        
+    "exponential_arrhenius":
+        D(t, T) = b * exp(a * t) * exp( Ea / k * (1/T_use - 1/T) )
+        theta = (b, a, Ea[eV])
+
 
     Noise model
     -----------
@@ -757,9 +793,16 @@ class ADTDataGenerator:
         unit_cv_signed=0.15,
         seed=None,
     ):
+        
         self.model = model.lower()
-        if self.model not in ("sqrt_arrhenius", "power_power", "power_exponential"):
+        if self.model not in (
+            "sqrt_arrhenius",
+            "power_power",
+            "power_exponential",
+            "exponential_arrhenius",
+        ):
             raise ValueError(f"Unsupported model: {model}")
+
 
         self.theta_pop = np.asarray(theta, float)
         self.p = len(self.theta_pop)
@@ -770,9 +813,9 @@ class ADTDataGenerator:
             raise ValueError("noise must be 'additive' or 'multiplicative'")
 
         self.stress_use = stress_use
-        if self.model == "sqrt_arrhenius":
+        if self.model in ("sqrt_arrhenius", "exponential_arrhenius"):
             if stress_use is None:
-                raise ValueError("sqrt_arrhenius requires stress_use (°C).")
+                raise ValueError(f"{self.model} requires stress_use (°C).")
             self.T_use_K = float(stress_use) + 273.15
 
         self.Df = Df
@@ -795,6 +838,9 @@ class ADTDataGenerator:
         elif self.model == "power_exponential":
             # (b, a, n) with a allowed to be signed
             self.pos_idx = {0, 2}
+        elif self.model == "exponential_arrhenius":
+            # (b, a, Ea) all > 0 in this formulation
+            self.pos_idx = {0, 1, 2}
         # signed indexes are the complement
         self.signed_idx = {i for i in range(self.p) if i not in self.pos_idx}
 
@@ -857,8 +903,25 @@ class ADTDataGenerator:
 
         elif self.model == "power_exponential":
             b, a, n = theta
-            expo = np.clip(a * S, -50, 50)   # stops overflow in extreme edge cases
-            return b * np.exp(expo) * (t ** n)
+            t_pos = np.clip(t, 1e-12, None)
+            S_pos = np.clip(S, 1e-12, None)
+            a_over_S = a / S_pos
+            expo = np.clip(a_over_S, -50.0, 50.0)   # numerical safety
+            return b * np.exp(expo) * (t_pos ** n)
+            
+        elif self.model == "exponential_arrhenius":
+            # theta = (b, a, Ea), stress = T in °C
+            b, a, Ea = theta
+            t = np.asarray(t, float)
+            S = np.asarray(stress, float)
+            t_pos = np.clip(t, 0.0, None)
+            # Convert °C -> K
+            T_C = S
+            T_K = T_C + 273.15
+            # Arrhenius acceleration relative to use temperature
+            accel = np.exp(Ea / K_BOLTZ_eV * (1.0 / self.T_use_K - 1.0 / T_K))
+            # Exponential in time * Arrhenius accel
+            return b * np.exp(a * t_pos) * accel
 
         else:
             raise RuntimeError("Unknown model inside _mu.")
@@ -941,5 +1004,134 @@ class ADTDataGenerator:
         }
         return data
 
+############################################################################################################################
+#                                                      START ALT ADDITIONS
+############################################################################################################################
 
+# Domain checking per L-S Fn and Distribution
+POSITIVE = "positive"
+REAL = "real"
+
+_MODEL_PARAM_DOMAIN = {
+    "Power":            {"a": POSITIVE, "n": REAL},
+    "Exponential":      {"b": POSITIVE, "a": REAL},
+    "Eyring":           {"a": REAL, "c": REAL},
+    "Dual_Exponential": {"c": POSITIVE, "a": REAL, "b": REAL},
+    "Dual_Power":       {"c": POSITIVE, "m": REAL, "n": REAL},
+    "Power_Exponential":{"c": POSITIVE, "a": REAL, "n": REAL},
+    "Sqrt_Arrhenius_ADT":        {"g0": POSITIVE,  "g1": POSITIVE,  "Ea": POSITIVE},
+    "Power_Power_ADT":           {"b": POSITIVE, "n_S": REAL, "m_t": REAL},
+    "Power_Exponential_ADT":     {"b": POSITIVE, "a": REAL, "n": REAL},
+    "Power_Arrhenius_ADT":       {"a": POSITIVE, "n": REAL, "Ea": POSITIVE},
+    "Exponential_Arrhenius_ADT": {"b": POSITIVE, "a": POSITIVE, "Ea": POSITIVE},
+    "Linear_Arrhenius_ADT":      {"a": REAL, "b": POSITIVE, "Ea": POSITIVE},
+    "Mitsuom_Arrhenius_ADT":     {"a": POSITIVE, "b": POSITIVE, "Ea": POSITIVE},
+    "Mitsuom_Arrhenius_Power1_ADT":     {"a": POSITIVE, "b": POSITIVE, "Ea": POSITIVE, "n": POSITIVE, "c": REAL},
+}
+
+_DIST_PARAM_DOMAIN = {
+    "Weibull":   {"beta": POSITIVE},
+    "Lognormal": {"sigma": POSITIVE},
+    "Normal":    {"sigma": POSITIVE},
+    "NormalError": {"sigma": POSITIVE},
+}
+
+def get_param_domain(model: str, dist: str, name: str, override: str | None = None) -> str:
+    if override in (POSITIVE, REAL):
+        return override
+    d_dom = _DIST_PARAM_DOMAIN.get(str(dist), {}).get(name)
+    if d_dom:
+        return d_dom
+    m_dom = _MODEL_PARAM_DOMAIN.get(str(model), {}).get(name)
+    return m_dom if m_dom else REAL
+
+# Generic Prior generation   
+def log_prior_single(name: str, x: float, prior, domain: str | None = None) -> float:
+    dom = domain if domain in (POSITIVE, REAL) else REAL
+    if prior is None:
+        if dom == POSITIVE:
+            return ss.norm.logpdf(np.log(x), loc=0.0, scale=5.0) - np.log(x) if x > 0 else -np.inf
+        return ss.norm.logpdf(x, loc=0.0, scale=5.0)
+
+    if isinstance(prior, (list, tuple)) and len(prior) >= 2:
+        kind = str(prior[0]).lower(); seq = prior; mp = None
+    elif isinstance(prior, dict) and "type" in prior:
+        kind = str(prior["type"]).lower(); seq = None; mp = prior
+    else:
+        raise ValueError(f"Unrecognized prior format for {name}: {prior}")
+
+    if dom == POSITIVE and x <= 0:
+        return -np.inf
+
+    if kind == "uniform":
+        if seq is not None:
+            if len(seq) < 3: raise ValueError('Uniform needs ("Uniform", low, high).')
+            low, high = float(seq[1]), float(seq[2])
+        else:
+            low, high = float(mp["low"]), float(mp["high"])
+        return ss.uniform.logpdf(x, low, high - low) if low <= x <= high else -np.inf
+
+    if kind == "normal":
+        if seq is not None:
+            if len(seq) < 3: raise ValueError('Normal needs ("Normal", mu, sigma).')
+            mu, sigma = float(seq[1]), float(seq[2])
+        else:
+            mu, sigma = float(mp["mu"]), float(mp["sigma"])
+        return ss.norm.logpdf(x, mu, sigma)
+
+    if kind == "lognormal":
+        if x <= 0: return -np.inf
+        if seq is not None:
+            if len(seq) < 3: raise ValueError('Lognormal needs ("Lognormal", mu_log, sigma_log).')
+            mu_log, sigma_log = float(seq[1]), float(seq[2])
+        else:
+            mu_log, sigma_log = float(mp["mu"]), float(mp["sigma"])
+        return ss.norm.logpdf(np.log(x), mu_log, sigma_log) - np.log(x)
+
+    if kind in ("loguniform", "log-uniform", "log_uniform"):
+        if seq is not None:
+            if len(seq) < 3: raise ValueError('LogUniform needs ("LogUniform", low, high).')
+            low, high = float(seq[1]), float(seq[2])
+        else:
+            low, high = float(mp["low"]), float(mp["high"])
+        if not (low > 0 and high > 0 and high > low):
+            raise ValueError("LogUniform bounds must satisfy 0 < low < high.")
+        if not (low <= x <= high): return -np.inf
+        return -np.log(x) - np.log(np.log(high) - np.log(low))
+
+    if kind in ("triangular", "triangle", "triang"):
+        if seq is not None:
+            if   len(seq) == 3: low, high = float(seq[1]), float(seq[2]); mode = 0.5*(low+high)
+            elif len(seq) == 4: low, mode, high = float(seq[1]), float(seq[2]), float(seq[3])
+            else: raise ValueError('Triangular needs ("Triangular", low, high) or ("Triangular", low, mode, high).')
+        else:
+            low = float(mp["low"]); high = float(mp["high"])
+            mode = float(mp["mode"]) if "mode" in mp else 0.5*(low+high)
+        if not (low < high and low <= mode <= high): raise ValueError("Triangular: low < high and low <= mode <= high.")
+        if x < low or x > high: return -np.inf
+        if x == mode:  # safe peak log-pdf via one-sided limit
+            eps = 1e-300
+            left  = np.log(2.0) + np.log(max(x-low, eps)) - np.log(high-low) - np.log(max(mode-low, eps))
+            right = np.log(2.0) + np.log(max(high-x, eps)) - np.log(high-low) - np.log(max(high-mode, eps))
+            return max(left, right)
+        if x < mode:
+            return np.log(2.0) + np.log(x-low) - np.log(high-low) - np.log(mode-low)
+        return np.log(2.0) + np.log(high-x) - np.log(high-low) - np.log(high-mode)
+
+    raise ValueError(f"Unsupported prior kind '{kind}' for {name}")
+
+def log_prior_vector(model: str, dist: str, theta_dict: dict, priors: dict | None) -> float:
+    total = 0.0
+    for name, val in theta_dict.items():
+        pr = None if priors is None else priors.get(name)
+        dom = get_param_domain(model, dist, name)
+        lp = log_prior_single(name, float(val), pr, domain=dom)
+        if not np.isfinite(lp):
+            return -np.inf
+        total += lp
+    return total
+    
+############################################################################################################################
+#                                                      END ADDITIONS
+############################################################################################################################
 
