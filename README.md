@@ -29,15 +29,16 @@ ENRE641-PPoF_and_ALT/
 
 ### 1. ADT Fitters (`adt_fitters/`)
 
-* Square-root Arrhenius degradation model
 * LSQ, MLE, and Bayesian parameter estimation
 * Diagnostic and residual plots
 * Additive & multiplicative noise models
 * Predictive degradation-time curves
+* Probability of Detection models
+* Measurement error models
 
 ### 2. ALT Bayesian Fitters (`alt_bayesian_fitters/`)
 
-* PyMC-based Bayesian ALT models
+* emcee-based Bayesian ALT models
 * Accelerated life likelihood functions
 * Posterior predictive checks
 * Full MCMC workflows
@@ -93,7 +94,8 @@ modarres_ch5_validation/notebooks/
 * NumPy / SciPy
 * Pandas
 * Matplotlib / Seaborn
-* PyMC
+* emcee
+* arviz
 * Jupyter
 
 ---
@@ -117,4 +119,4 @@ Please cite appropriately if used in publications.
 
 **Justin Ryan**
 University of Maryland – Reliability Engineering
-Australian Army – ESEP / ATEC
+Australian Army - Corps of Royal Australian Electrical and Mechanical Engineers
