@@ -78,7 +78,7 @@ model = Some_ADT_Model_Class(
 
 Damage model (increasing) with temperature acceleration:
 
-[ D(t, T) = a , t^{n} \exp\left( \frac{E_a}{k_B}\left(\frac{1}{T_{use}} - \frac{1}{T}\right) \right) ]
+$ D(t, T) = a , t^{n} \exp\left( \frac{E_a}{k_B}\left(\frac{1}{T_{use}} - \frac{1}{T}\right) \right) $
 
 ### 2.2. Constructor
 
