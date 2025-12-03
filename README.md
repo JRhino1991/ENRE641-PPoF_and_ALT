@@ -9,13 +9,13 @@ This repository contains Python modules, Bayesian fitters, and validation notebo
 ```
 ENRE641-PPoF_and_ALT/
 │
-├── adt_fitters/                     # ADT fitting models (LSQ, MLE, Bayesian)
-│   └── __init__.py
-│   └── Fit_ADT_sqrt_Arrhenius.ipynb
+├── adt_fitters/                     # ADT fitting models (LSQ, MLE, Bayesian, POD and Meas Error)
+│   └── ADT_fitters.py
+│   └── adt_utils.py
 │
 ├── alt_bayesian_fitters/            # ALT Bayesian modules and tests
-│   └── __init__.py
 │   └── ALT_Bayesian_fitters.py
+│   └── Utils.py
 │   └── test_ALT_Bayesian_fitters.py
 │
 └── modarres_ch5_validation/         # Reproduction and extension of Chapter 5
