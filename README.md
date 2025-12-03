@@ -20,7 +20,6 @@ ENRE641-PPoF_and_ALT/
 │
 └── modarres_ch5_validation/         # Reproduction and extension of Chapter 5
     ├── data/                        # All relevant CSV datasets
-    ├── figures/                     # Exported plots, diagnostics, results
     └── notebooks/                   # Clean example notebooks (5.1–5.9)
 ```
 
