@@ -158,6 +158,4 @@ model = Fit_ADT_Power_Power(
 
 ## 7. Extending the Library
 
-1. Subclass `Base_ADT_Model`.
-2. Implement `_mu`, `_model_description`, `_init_guess`, `_negloglik`.
-3. (Optional) Implement Bayesian + TTF + plotting helpers.
+See "ADT Developer Guide.md"
