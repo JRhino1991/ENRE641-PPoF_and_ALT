@@ -217,6 +217,7 @@ def plot_degradation_by_stress(
     base_colors=None,
     base_markers=None,
     show_unit_lines=True,
+    save=None
 ):
     """
     Scatter/line plot of degradation vs time, grouped by stress level.
@@ -315,7 +316,11 @@ def plot_degradation_by_stress(
     ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.7)
     ax.legend(title=legend_title, frameon=False, ncol=min(n_levels, 3))
     plt.tight_layout()
-    plt.show()
+    if save is not None:
+        plt.savefig(save, dpi=300)
+        plt.close()
+    else: 
+        plt.show()
 
 
 def plot_residual_diagnostics(
@@ -327,6 +332,7 @@ def plot_residual_diagnostics(
     stress_label="Stress level",
     base_colors=None,
     base_markers=None,
+    save=None,
 ):
     """
     Standard 3-panel residual diagnostics:
@@ -409,7 +415,11 @@ def plot_residual_diagnostics(
         fig.suptitle(suptitle, y=1.02)
 
     plt.tight_layout()
-    plt.show()
+    if save is not None:
+        plt.savefig(save, dpi=300)
+        plt.close()
+    else: 
+        plt.show()
 
 
 # ---------------------------------------------------------------------
@@ -626,7 +636,8 @@ def summarize_ttf(samples, hdi_prob=0.95,
 def plot_ttf_hist_with_fits(ttf_samples,
                             unit_label="time units",
                             title="TTF posterior and best distribution fits",
-                            bins=60):
+                            bins=60,
+                            save=None):
     """
     Plot TTF histogram and fit Weibull / Gamma / Lognormal using reliability.Fitters.Fit_Everything.
 
@@ -649,7 +660,7 @@ def plot_ttf_hist_with_fits(ttf_samples,
         )
     except Exception as e:
         print("Fit_Everything failed; showing histogram only. Error:", e)
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(7, 5))
         plt.hist(ttf_clean, bins=bins, density=True, alpha=0.7)
         plt.xlabel(f"TTF ({unit_label})")
         plt.ylabel("Posterior density")
@@ -681,7 +692,7 @@ def plot_ttf_hist_with_fits(ttf_samples,
         loc=0,
     )
 
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(7, 5))
     plt.hist(ttf_clean, bins=bins, density=True, alpha=0.6,
              label="Posterior TTF samples")
 
@@ -707,7 +718,11 @@ def plot_ttf_hist_with_fits(ttf_samples,
     plt.grid(True, linestyle=":", linewidth=0.7, alpha=0.7)
     plt.legend(frameon=False)
     plt.tight_layout()
-    plt.show()
+    if save is not None:
+        plt.savefig(save, dpi=300)
+        plt.show()
+    else: 
+        plt.show()
 
 K_BOLTZ_eV = 8.617333262e-5  # eV/K 
 
@@ -731,13 +746,21 @@ class ADTDataGenerator:
         theta = (b, n, m)
 
     "power_exponential":
-        D(t, S) = b * exp(a / S) * t^n
+        D(t, S) = b * exp(a * S) * t^n
         theta = (b, a, n)
-        
+
+    "power_arrhenius":
+        D(t, T) = a * t^n * exp( Ea / k * (1/T_use - 1/T) )
+        theta = (a, n, Ea[eV])
+
     "exponential_arrhenius":
         D(t, T) = b * exp(a * t) * exp( Ea / k * (1/T_use - 1/T) )
         theta = (b, a, Ea[eV])
 
+    "mitsuom_arrhenius":
+        D(t, T) = [ 1 + a * ( t * exp( Ea / k * (1/T_use - 1/T) ) )^b ]^{-1}
+        theta = (a, b, Ea[eV])
+        (Performance model: D in (0, 1], *decreasing* with time.)
 
     Noise model
     -----------
@@ -758,7 +781,8 @@ class ADTDataGenerator:
 
     Parameters
     ----------
-    model : {"sqrt_arrhenius", "power_power", "power_exponential"}
+    model : {"sqrt_arrhenius", "power_power", "power_exponential",
+             "power_arrhenius", "exponential_arrhenius", "mitsuom_arrhenius"}
         Degradation model form.
     theta : sequence of floats
         Population parameter vector (see above).
@@ -767,10 +791,12 @@ class ADTDataGenerator:
     noise : {"additive", "multiplicative"}, default "additive"
         Observation noise model.
     stress_use : float, optional
-        Use stress (°C for sqrt_arrhenius, same units as S otherwise).
-        Required for sqrt_arrhenius; optional otherwise.
+        Use stress (°C for Arrhenius models, same units as S otherwise).
+        Required for all *_arrhenius models.
     Df : float, optional
-        Failure threshold on *damage* scale (fail when D >= Df).
+        Failure threshold:
+          - For *damage* models: fail when D >= Df
+          - For *performance* models (Mitsuom): fail when D <= Df
         Used if `truncate_at_failure=True` in `generate`.
     unit_cv_pos : float, default 0.15
         Rough coefficient-of-variation for positive parameters; internally
@@ -793,16 +819,16 @@ class ADTDataGenerator:
         unit_cv_signed=0.15,
         seed=None,
     ):
-        
         self.model = model.lower()
         if self.model not in (
             "sqrt_arrhenius",
             "power_power",
             "power_exponential",
+            "power_arrhenius",
             "exponential_arrhenius",
+            "mitsuom_arrhenius",
         ):
             raise ValueError(f"Unsupported model: {model}")
-
 
         self.theta_pop = np.asarray(theta, float)
         self.p = len(self.theta_pop)
@@ -812,8 +838,19 @@ class ADTDataGenerator:
         if self.noise not in ("additive", "multiplicative"):
             raise ValueError("noise must be 'additive' or 'multiplicative'")
 
+        # Scale type: needed only for truncation logic
+        if self.model == "mitsuom_arrhenius":
+            self.scale_type = "performance"
+        else:
+            self.scale_type = "damage"
+
         self.stress_use = stress_use
-        if self.model in ("sqrt_arrhenius", "exponential_arrhenius"):
+        if self.model in (
+            "sqrt_arrhenius",
+            "power_arrhenius",
+            "exponential_arrhenius",
+            "mitsuom_arrhenius",
+        ):
             if stress_use is None:
                 raise ValueError(f"{self.model} requires stress_use (°C).")
             self.T_use_K = float(stress_use) + 273.15
@@ -830,7 +867,7 @@ class ADTDataGenerator:
 
         # Which parameters are constrained positive vs signed (by index)
         if self.model == "sqrt_arrhenius":
-            # (g0, g1, Ea) all positive in your fits
+            # (g0, g1, Ea) all positive
             self.pos_idx = {0, 1, 2}
         elif self.model == "power_power":
             # (b, n, m) all > 0
@@ -838,9 +875,16 @@ class ADTDataGenerator:
         elif self.model == "power_exponential":
             # (b, a, n) with a allowed to be signed
             self.pos_idx = {0, 2}
+        elif self.model == "power_arrhenius":
+            # (a, n, Ea) all > 0
+            self.pos_idx = {0, 1, 2}
         elif self.model == "exponential_arrhenius":
             # (b, a, Ea) all > 0 in this formulation
             self.pos_idx = {0, 1, 2}
+        elif self.model == "mitsuom_arrhenius":
+            # (a, b, Ea) all > 0
+            self.pos_idx = {0, 1, 2}
+
         # signed indexes are the complement
         self.signed_idx = {i for i in range(self.p) if i not in self.pos_idx}
 
@@ -870,19 +914,17 @@ class ADTDataGenerator:
                 theta_u[i] = np.exp(self.rng.normal(mu_log, self.unit_log_sd))
             else:
                 # signed → Normal around mean, *relative* scale
-                # OLD: scale = max(abs(theta_i), 1.0)
                 scale = max(abs(theta_i), 1e-8)   # tiny floor to avoid exactly zero
                 sd = self.unit_signed_rel_sd * scale
                 theta_u[i] = self.rng.normal(theta_i, sd)
         return theta_u
 
-
     # ------------------------------------------------------------------
-    # Core: mean degradation model
+    # Core: mean degradation / performance model
     # ------------------------------------------------------------------
     def _mu(self, theta, t, stress):
         """
-        Mean degradation mu(t, stress; theta) for the chosen model.
+        Mean response mu(t, stress; theta) for the chosen model.
 
         t      : scalar or array
         stress : scalar or array broadcastable to t
@@ -902,26 +944,42 @@ class ADTDataGenerator:
             return b * (S ** n) * (t ** m)
 
         elif self.model == "power_exponential":
+            # Match Fit_ADT_Power_Exponential: D = b * exp(a * S) * t^n
             b, a, n = theta
             t_pos = np.clip(t, 1e-12, None)
-            S_pos = np.clip(S, 1e-12, None)
-            a_over_S = a / S_pos
-            expo = np.clip(a_over_S, -50.0, 50.0)   # numerical safety
+            S_pos = np.asarray(S, float)
+            expo = np.clip(a * S_pos, -50.0, 50.0)
             return b * np.exp(expo) * (t_pos ** n)
-            
+
+        elif self.model == "power_arrhenius":
+            # theta = (a, n, Ea), stress = T in °C
+            a, n, Ea = theta
+            t_pos = np.clip(t, 1e-12, None)
+            T_C = S
+            T_K = T_C + 273.15
+            accel = np.exp(Ea / K_BOLTZ_eV * (1.0 / self.T_use_K - 1.0 / T_K))
+            return a * (t_pos ** n) * accel
+
         elif self.model == "exponential_arrhenius":
             # theta = (b, a, Ea), stress = T in °C
             b, a, Ea = theta
-            t = np.asarray(t, float)
-            S = np.asarray(stress, float)
             t_pos = np.clip(t, 0.0, None)
-            # Convert °C -> K
             T_C = S
             T_K = T_C + 273.15
-            # Arrhenius acceleration relative to use temperature
             accel = np.exp(Ea / K_BOLTZ_eV * (1.0 / self.T_use_K - 1.0 / T_K))
-            # Exponential in time * Arrhenius accel
             return b * np.exp(a * t_pos) * accel
+
+        elif self.model == "mitsuom_arrhenius":
+            # theta = (a, b, Ea), performance model in (0,1]
+            a, b, Ea = theta
+            t_pos = np.clip(t, 1e-12, None)
+            T_C = S
+            T_K = T_C + 273.15
+            expo = Ea / K_BOLTZ_eV * (1.0 / self.T_use_K - 1.0 / T_K)
+            expo = np.clip(expo, -50.0, 50.0)
+            accel = np.exp(expo)
+            L = t_pos * accel
+            return 1.0 / (1.0 + a * (L ** b))
 
         else:
             raise RuntimeError("Unknown model inside _mu.")
@@ -948,7 +1006,7 @@ class ADTDataGenerator:
         truncate_at_failure=False,
     ):
         """
-        Generate synthetic ADT degradation data.
+        Generate synthetic ADT degradation / performance data.
 
         Parameters
         ----------
@@ -959,8 +1017,9 @@ class ADTDataGenerator:
         n_units_per_stress : int
             Number of units to simulate at each stress.
         truncate_at_failure : bool, default False
-            If True and Df is set, stop generating observations for a unit
-            once D >= Df.
+            If True and Df is set:
+              - damage models: stop once D >= Df
+              - performance models: stop once D <= Df
 
         Returns
         -------
@@ -991,8 +1050,14 @@ class ADTDataGenerator:
                     u_list.append(unit_id)
 
                     if truncate_at_failure and (self.Df is not None):
-                        if y >= self.Df:
-                            break
+                        if self.scale_type == "performance":
+                            # Mitsuom-type: fail when D <= Df
+                            if y <= self.Df:
+                                break
+                        else:
+                            # Damage models: fail when D >= Df
+                            if y >= self.Df:
+                                break
 
                 unit_id += 1
 
@@ -1025,7 +1090,7 @@ _MODEL_PARAM_DOMAIN = {
     "Power_Arrhenius_ADT":       {"a": POSITIVE, "n": REAL, "Ea": POSITIVE},
     "Exponential_Arrhenius_ADT": {"b": POSITIVE, "a": POSITIVE, "Ea": POSITIVE},
     "Linear_Arrhenius_ADT":      {"a": REAL, "b": POSITIVE, "Ea": POSITIVE},
-    "Mitsuom_Arrhenius_ADT":     {"a": POSITIVE, "b": POSITIVE, "Ea": POSITIVE},
+    "Mitsuom_Arrhenius_ADT":     {"a": POSITIVE, "b": POSITIVE, "Ea": POSITIVE, "n": POSITIVE},
     "Mitsuom_Arrhenius_Power1_ADT":     {"a": POSITIVE, "b": POSITIVE, "Ea": POSITIVE, "n": POSITIVE, "c": REAL},
 }
 
